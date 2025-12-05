@@ -1,0 +1,24 @@
+{
+	"name": "my-chat-worker",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-03-07",
+	"compatibility_flags": ["nodejs_compat"],
+	"observability": {
+	  "enabled": true,
+	  "head_sampling_rate": 1
+	},
+	"durable_objects": {
+	  "bindings": [
+		{
+		  "name": "MY_DURABLE_OBJECT",
+		  "class_name": "MyDurableObject"
+		}
+	  ]
+	},
+	"migrations": [
+	  {
+		"tag": "v1",
+		"new_sqlite_classes": ["MyDurableObject"]
+	  }
+	]
+  }
