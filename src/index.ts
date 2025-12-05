@@ -5,13 +5,28 @@ export interface Env {
   USER_SECRETS: string;
 }
 
+export interface Env {
+  MY_DURABLE_OBJECT: DurableObjectNamespace;
+  USER_SECRETS: string;
+  AI: Ai; 
+}
+
 interface WebSocketAttachment {
   name: string;
   id: string;
   joinedAt: number;
 }
 
+// 定义消息结构
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
 export class MyDurableObject extends DurableObject<Env> {
+  // 定义一个内存变量，用来存聊天记录
+  history: ChatMessage[] = [];
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
   }
@@ -107,7 +122,14 @@ export class MyDurableObject extends DurableObject<Env> {
       }));
 
       this.ctx.acceptWebSocket(server);
+      // 1. 广播给所有人：有人进来了
       this.broadcast(`[系统通知]: 欢迎 ${name} 加入房间！`);
+
+      // 2. 单独给这个新用户发一条“使用说明”
+      // server 代表当前这个连接，server.send 只会发给新进入会话人员
+      server.send(`[系统提示]: 👋 你好 ${name}！我是 AI 助手 Jarvis。
+      如果你想跟我聊天，请在消息开头加上 "Jarvis" 或 "@Jarvis"。
+      例如: "Jarvis 给我讲个笑话"`);
 
       return new Response(null, {
         status: 101,
@@ -118,12 +140,78 @@ export class MyDurableObject extends DurableObject<Env> {
     return new Response("Durable Object Active", { status: 200 });
   }
 
+  // 收到消息时的处理逻辑
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachmentStr = ws.deserializeAttachment();
     if (!attachmentStr) return;
     const { name } = JSON.parse(attachmentStr as string);
-    this.broadcast(`[${name}]: ${message}`);
+    
+    const userMsg = message.toString();
+    const lowerCaseMsg = userMsg.toLowerCase().trim();
+
+    // 1. 广播用户的原始消息
+    this.broadcast(`[${name}]: ${userMsg}`);
+
+    // 2. 【新增】处理“帮助”指令
+    if (lowerCaseMsg === "help" || lowerCaseMsg === "帮助") {
+      ws.send(`[系统提示]: 💡 呼叫 AI 的方法：
+      在消息前加 "Jarvis" 或 "@Jarvis"。
+      例如: "@Jarvis 今天天气怎么样？"`);
+      return; // 既然是求助，就不需要 AI 再处理了，直接返回
+    }
+
+    // 3. 处理呼叫 AI 的逻辑 (之前写的)
+    if (lowerCaseMsg.startsWith("jarvis") || lowerCaseMsg.startsWith("@jarvis")) {
+        this.ctx.waitUntil(this.askAI(name, userMsg));
+    }
   }
+
+  // 专门负责和 AI 对话的方法
+  async askAI(userName: string, userQuestion: string) {
+      let aiText = "";
+
+      try {
+        // 1. 把用户和用户的新问题加入历史记录
+        this.history.push({ role: "user", content: `[${userName} 说]: ${userQuestion}` });
+
+        // 2. 限制记忆长度 (滑动窗口)
+        // 如果记录超过 20 条 (10轮对话)，就删掉最旧的，防止 token 爆炸
+        if (this.history.length > 20) {
+          this.history = this.history.slice(this.history.length - 20);
+        }
+
+        // 3. 准备发送给 AI 的完整数据包
+        // 结构是: [系统人设, ...过去的对话记录]
+        const systemPrompt = `你是一个群聊助手，名字叫 "Jarvis"。
+        当前正在和你对话的用户是 "${userName}"。
+        请用简短、幽默的中文回答。
+        不要重复用户的名字，像老朋友一样聊天。`;
+
+        const messagesToSend = [
+          { role: "system", content: systemPrompt },
+          ...this.history // 展开历史记录
+        ];
+
+        // 4. 调用 AI
+        const response = await this.env.AI.run("@cf/meta/llama-3-8b-instruct", {
+          messages: messagesToSend as any // 类型断言，防止 TS 报错
+        });
+
+        aiText = (response as any).response;
+
+        // 5. 【关键】把 AI 的回复也存进历史记录
+        // 这样下一次 AI 就能知道自己说过什么了
+        this.history.push({ role: "assistant", content: aiText });
+
+      } catch (error) {
+        const err = error as Error;
+        console.warn("AI 调用失败:", err.message);
+        aiText = `[脑回路断开]: 哎呀，我现在有点晕，刚才说到哪了？(${err.message})`;
+      }
+
+      // 6. 广播回复
+      this.broadcast(`[Jarvis]: ${aiText}`);
+    }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
     const attachmentStr = ws.deserializeAttachment();
