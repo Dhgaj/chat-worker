@@ -1,0 +1,5 @@
+# Cloudflare Workers 环境变量示例
+
+# 格式：变量名=值
+# 注意：JSON 字符串最好写在一行，或者小心转义
+USER_SECRETS={"张三":"pass123","李四":"secret456"}

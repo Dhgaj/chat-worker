@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
-  MY_DURABLE_OBJECT: DurableObjectNamespace;
+  CHAT_ROOM: DurableObjectNamespace;
   USER_SECRETS: string;
   AI: Ai; 
 }
@@ -17,7 +17,7 @@ interface ChatMessage {
   content: string;
 }
 
-export class MyDurableObject extends DurableObject<Env> {
+export class ChatRoom extends DurableObject<Env> {
   history: ChatMessage[] = [];
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -213,8 +213,8 @@ export default {
         return new Response("Expected Upgrade: websocket", { status: 426 });
       }
 
-      const id = env.MY_DURABLE_OBJECT.idFromName("global-room");
-      const stub = env.MY_DURABLE_OBJECT.get(id);
+      const id = env.CHAT_ROOM.idFromName("global-room");
+      const stub = env.CHAT_ROOM.get(id);
 
       return stub.fetch(new Request(url.toString().replace("/ws", "/websocket"), request));
     }
