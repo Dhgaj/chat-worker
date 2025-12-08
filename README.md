@@ -13,7 +13,7 @@
 
 ### 环境要求
 
-- Node.js 18+
+- Node.js 20+
 - npm 或 yarn
 - Cloudflare 账号
 - Wrangler CLI

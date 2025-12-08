@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
+const MAX_MESSAGE_LENGTH = 1024;
+
 export interface Env {
   CHAT_ROOM: DurableObjectNamespace;
   USER_SECRETS: string;
@@ -27,10 +29,24 @@ export class ChatRoom extends DurableObject<Env> {
   broadcast(message: string) {
     const websockets = this.ctx.getWebSockets();
     for (const client of websockets) {
+      // 跳过和回收已经失效的连接，避免反复发送报错
+      if (client.readyState !== WebSocket.OPEN) {
+        try {
+          client.close(1011, "stale connection");
+        } catch {
+          // ignore
+        }
+        continue;
+      }
+
       try {
         client.send(message);
-      } catch (e) {
-        // 忽略发送失败
+      } catch {
+        try {
+          client.close(1011, "failed to deliver");
+        } catch {
+          // ignore
+        }
       }
     }
   }
@@ -118,12 +134,23 @@ export class ChatRoom extends DurableObject<Env> {
     const attachmentStr = ws.deserializeAttachment();
     if (!attachmentStr) return;
     const { name } = JSON.parse(attachmentStr as string);
-    const userMsg = message.toString();
+    const userMsg = this.decodeMessage(message);
+    const trimmed = userMsg.trim();
 
-    this.broadcast(`[${name}]: ${userMsg}`);
-    this.recordHistory(name, userMsg, "user");
+    if (!trimmed) {
+      ws.send("[系统提示]: 消息不能为空或仅包含空白字符。");
+      return;
+    }
 
-    const lowerCaseMsg = userMsg.toLowerCase().trim();
+    if (trimmed.length > MAX_MESSAGE_LENGTH) {
+      ws.send(`[系统提示]: 消息过长（限制 ${MAX_MESSAGE_LENGTH} 字），请简短一些。`);
+      return;
+    }
+
+    this.broadcast(`[${name}]: ${trimmed}`);
+    this.recordHistory(name, trimmed, "user");
+
+    const lowerCaseMsg = trimmed.toLowerCase();
 
     if (lowerCaseMsg === "help" || lowerCaseMsg === "帮助") {
       ws.send(`[系统提示]: 直接聊天即可。@Jarvis 呼叫 AI。`);
@@ -131,7 +158,7 @@ export class ChatRoom extends DurableObject<Env> {
     }
 
     if (lowerCaseMsg.startsWith("jarvis") || lowerCaseMsg.startsWith("@jarvis")) {
-        this.ctx.waitUntil(this.askAI(name, userMsg));
+        this.ctx.waitUntil(this.askAI(name, trimmed));
     }
   }
 
@@ -201,6 +228,11 @@ export class ChatRoom extends DurableObject<Env> {
       }
     }
   }
+
+  private decodeMessage(message: string | ArrayBuffer): string {
+    if (typeof message === "string") return message;
+    return new TextDecoder().decode(message);
+  }
 }
 
 export default {
@@ -222,4 +254,3 @@ export default {
     return new Response("Chat Server Protected.", { status: 200 });
   },
 } satisfies ExportedHandler<Env>;
-
