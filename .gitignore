@@ -60,3 +60,10 @@ worker-configuration.d.ts
 # 临时文件
 *.tmp
 *.temp
+
+# 备份文件
+*.bak
+*.backup
+
+# 回收废纸篓
+.Trash/

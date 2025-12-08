@@ -48,6 +48,9 @@ npm run dev
 
 # 或者直接使用 Wrangler
 wrangler dev
+
+# 局域网广播测试
+wrangler dev --ip 0.0.0.0
 ```
 
 ### 测试
