@@ -31,14 +31,14 @@ npm install -g wrangler
 ### 配置环境变量
 
 1. 复制示例环境变量文件：
-   ```bash
-   cp .dev.vars.example .dev.vars
-   ```
+  ```bash
+  cp .dev.vars.example .dev.vars
+  ```
 
 2. 编辑 `.dev.vars` 文件，填写您的配置：
-   ```
-   USER_SECRETS={"username":"password"}
-   ```
+  ```
+  USER_SECRETS={"username":"password"}
+  ```
 
 ### 本地开发
 
@@ -77,13 +77,35 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
 
 ```
 .
-├── src/
-│   └── index.ts         # 主应用入口
-├── test/                # 测试文件
+├── .dev.vars.example
+├── .editorconfig
 ├── .gitignore
+├── .prettierrc
+├── LICENSE
+├── package-lock.json
 ├── package.json
+├── README.md
+├── run.sh
 ├── tsconfig.json
-└── wrangler.jsonc       # Cloudflare Workers 配置
+├── vitest.config.mts
+├── wrangler.jsonc
+├── public/
+│   ├── index.html
+│   ├── script.js
+│   └── style.css
+├── src/
+│   ├── chat-room.ts
+│   ├── config.ts
+│   ├── index.ts         
+│   ├── types.ts
+│   ├── utils.ts
+│   └── services/
+│       └── ai.ts
+├── static/
+└── test/
+    ├── env.d.ts
+    ├── index.spec.ts
+    └── tsconfig.json
 ```
 
 ## 🔧 配置
@@ -111,14 +133,16 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
 ## 🚀 部署
 
 1. 登录 Cloudflare：
-   ```bash
-   wrangler login
-   ```
+  ```bash
+  wrangler login
+  ```
 
 2. 部署 Worker：
-   ```bash
-   npm run deploy
-   ```
+  ```bash
+  npx wrangler deploy
+  npx wrangler secret put USER_SECRETS
+  # 然后输入你的 json 格式的内容
+  ```
 
 ## 🤝 贡献
 
