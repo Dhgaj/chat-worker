@@ -1,11 +1,20 @@
-import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloudflare:test';
+import { env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 import worker from '../src/index';
+import { RATE_LIMIT_MS } from '../src/config';
 // 引入类型定义，方便 TS 提示
-import type { Env } from '../src/index';
+import type { Env } from '../src/types';
 
 // 为了方便，定义一个类型转换函数，省得每次都写 as unknown as Env
 const getEnv = () => env as unknown as Env;
+
+beforeAll(() => {
+	// 保底：本地未配置 .dev.vars 时也能跑测试
+	const currentEnv = getEnv();
+	if (!currentEnv.USER_SECRETS) {
+		currentEnv.USER_SECRETS = JSON.stringify({ 张三: 'pass123', 李四: 'secret456' });
+	}
+});
 
 describe('聊天室 Worker 集成测试', () => {
 	// 测试鉴权失败的情况
@@ -19,7 +28,7 @@ describe('聊天室 Worker 集成测试', () => {
 		const response = await worker.fetch(request, getEnv(), ctx);
 		await waitOnExecutionContext(ctx);
 
-		// 这里的逻辑是：你现在的代码是先建立连接(101)，发报错消息，再断开
+		// 断言：现在的代码是先建立连接(101)，发报错消息，再断开
 		expect(response.status).toBe(101);
 
 		// 拿到客户端的 WebSocket
@@ -137,6 +146,9 @@ describe('聊天室 Worker 集成测试', () => {
 		await new Promise((r) => setTimeout(r, 50));
 		const emptyWarning = messages.find((m) => m.includes('不能为空'));
 		expect(emptyWarning).toBeDefined();
+
+		// 等待超过限流窗口，再发送下一条消息
+		await new Promise((r) => setTimeout(r, RATE_LIMIT_MS + 50));
 
 		// 发送超长消息
 		const longMsg = 'x'.repeat(1100);

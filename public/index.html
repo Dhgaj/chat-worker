@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>智能聊天室</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-box">
+      <h2 style="color:#333; margin-bottom: 20px;">💬 智能聊天室</h2>
+      <input type="text" id="username" placeholder="你的名字" />
+      <input type="password" id="secret" placeholder="房间密码" />
+      <button onclick="joinChat()">进入房间</button>
+    </div>
+  </div>
+
+  <div id="chat-screen" class="hidden">
+    <div class="header">
+      <span>Jarvis 在线 :) <span id="online-count">-</span>)</span>
+      <button class="btn-outline" onclick="logout()">退出</button>
+    </div>
+
+    <div id="messages"></div>
+
+    <div class="input-area">
+      <input type="text" id="msg-input" placeholder="输入消息..." onkeypress="handleKeyPress(event)" />
+      <button onclick="sendMessage()">发送</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
