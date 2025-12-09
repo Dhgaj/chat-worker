@@ -31,14 +31,14 @@ npm install -g wrangler
 ### 配置环境变量
 
 1. 复制示例环境变量文件：
-  ```bash
-  cp .dev.vars.example .dev.vars
-  ```
+   ```bash
+   cp .dev.vars.example .dev.vars
+   ```
 
 2. 编辑 `.dev.vars` 文件，填写您的配置：
-  ```
-  USER_SECRETS={"username":"password"}
-  ```
+   ```
+   USER_SECRETS={"username":"password"}
+   ```
 
 ### 本地开发
 
@@ -111,14 +111,14 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
 ## 🚀 部署
 
 1. 登录 Cloudflare：
-  ```bash
-  wrangler login
-  ```
+   ```bash
+   wrangler login
+   ```
 
 2. 部署 Worker：
-  ```bash
-  npm run deploy
-  ```
+   ```bash
+   npm run deploy
+   ```
 
 ## 🤝 贡献
 

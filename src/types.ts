@@ -1,9 +1,5 @@
 // 类型定义
 
-<<<<<<< HEAD
-=======
-// AI 相关接口
->>>>>>> main
 export interface AiTextGenerationInput {
   messages: { role: string; content: string }[];
   temperature?: number;
@@ -26,10 +22,7 @@ export interface Env {
   CHAT_ROOM: DurableObjectNamespace;
   USER_SECRETS: string;
   AI: Ai;
-<<<<<<< HEAD
   ASSETS: Fetcher; 
-=======
->>>>>>> main
 }
 
 // WebSocket 附加信息
