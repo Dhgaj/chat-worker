@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     env:
-      USER_SECRETS: '{"张三":"pass123","李四":"secret456"}'    
+      USER_SECRETS: ${{ secrets.USER_SECRETS }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,3 +37,5 @@ jobs:
 
       - name: Done
         run: echo "Worker tests passed!"
+
+        
