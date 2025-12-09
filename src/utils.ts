@@ -1,4 +1,8 @@
 // 工具函数 (解码、清洗文本)
+<<<<<<< HEAD
+=======
+
+>>>>>>> main
 // 解码 WebSocket 消息
 export function decodeMessage(message: string | ArrayBuffer): string {
   if (typeof message === "string") return message;
@@ -9,10 +13,17 @@ export function decodeMessage(message: string | ArrayBuffer): string {
 export function cleanAiResponse(text: string): string {
   let cleaned = text.trim();
 
+<<<<<<< HEAD
   // 去掉 [Name]: 格式
   cleaned = cleaned.replace(/^\[[^\]]+\][:：]\s*/, "");
   
   // 去掉 Name: 格式，但排除纯数字的情况（保护时间显示）
+=======
+  // 1. 去掉 [Name]: 格式
+  cleaned = cleaned.replace(/^\[[^\]]+\][:：]\s*/, "");
+  
+  // 2. 去掉 Name: 格式，但排除纯数字的情况（保护时间显示）
+>>>>>>> main
   // 逻辑：开头必须是 字母或中文，不能包含数字，后面紧跟冒号
   cleaned = cleaned.replace(/^[a-zA-Z\u4e00-\u9fa5]+[:：]\s*/, "");
 
