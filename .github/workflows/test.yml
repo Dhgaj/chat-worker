@@ -1,0 +1,37 @@
+name: Test
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=optional
+
+      - name: Prepare Wrangler log dir
+        run: mkdir -p .wrangler/logs
+
+      - name: Run tests
+        env:
+          WRANGLER_LOG_PATH: .wrangler/logs
+        run: npm test
+
+      - name: Done
+        run: echo "Worker tests passed!"
