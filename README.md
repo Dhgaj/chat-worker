@@ -94,13 +94,13 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
 │   ├── script.js
 │   └── style.css
 ├── src/
+│   ├── ai.ts
 │   ├── chat-room.ts
 │   ├── config.ts
-│   ├── index.ts         
+│   ├── index.ts
+│   ├── prompts.ts
 │   ├── types.ts
-│   ├── utils.ts
-│   └── services/
-│       └── ai.ts
+│   └── utils.ts
 ├── static/
 └── test/
     ├── env.d.ts

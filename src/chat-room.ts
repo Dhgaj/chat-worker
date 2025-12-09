@@ -3,7 +3,7 @@ import { DurableObject } from "cloudflare:workers";
 import { Env, ChatMessage, WebSocketAttachment } from "./types";
 import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS } from "./config";
 import { decodeMessage } from "./utils";
-import { askJarvis } from "./services/ai";
+import { askJarvis } from "./ai";
 
 export class ChatRoom extends DurableObject<Env> {
   history: ChatMessage[] = [];
