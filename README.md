@@ -80,13 +80,15 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
 ```
 .
 ├── src/
-│   ├── index.ts         # 主应用入口
-│   ├── ai-robot.ts      # AI 机器人 Durable Object 实现
-│   ├── ai.ts            # AI 服务集成
-│   ├── config.ts        # 应用配置
-│   ├── prompts.ts       # AI 提示词模板
-│   ├── types.ts         # 类型定义
-│   └── utils.ts         # 工具函数
+│   ├── index.ts         # [入口] 路由分发
+│   ├── robot.ts         # [身体] Durable Object (WebSocket 收发、鉴权)
+│   ├── brain.ts         # [大脑] 记忆管理 + AI 思考
+│   ├── prompts.ts       # [提示词] Prompt 模板
+│   ├── tools/           # [工具] 外部能力扩展
+│   │   └── index.ts     #        工具注册表
+│   ├── config.ts        # [配置] 常量配置
+│   ├── types.ts         # [类型] 类型定义
+│   └── utils.ts         # [杂项] 通用工具函数
 ├── .dev.vars.example    # 环境变量示例
 ├── .gitignore
 ├── package.json
@@ -104,14 +106,14 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
 
 ```json
 {
-  "name": "chat-worker",
+  "name": "ai-robot-worker",
   "main": "src/index.ts",
   "compatibility_date": "2025-12-07",
   "durable_objects": {
     "bindings": [
- {
+      {
         "name": "AI_ROBOT",
-        "class_name": "AIRobot"
+        "class_name": "Robot"
       }
     ]
   }
