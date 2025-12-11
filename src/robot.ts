@@ -1,0 +1,176 @@
+// [身体] Durable Object (连接保持、鉴权)
+/// <reference types="@cloudflare/workers-types" />
+import { Env, WebSocketAttachment } from "./types";
+import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS, DEFAULT_ROBOT_NAME } from "./config";
+import { decodeMessage } from "./utils";
+import { Memory, think } from "./brain";
+
+// 扩展 WebSocket 类型以包含自定义方法
+declare global {
+  interface WebSocket {
+    serializeAttachment(attachment: string): void;
+    deserializeAttachment(): string | null;
+  }
+}
+
+export class Robot implements DurableObject {
+  private state: DurableObjectState;
+  private env: Env;
+  private memory: Memory;
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this.env = env;
+    this.memory = new Memory(50);
+  }
+
+  // 获取机器人名字
+  private get name(): string {
+    return this.env.AI_ROBOT_NAME || DEFAULT_ROBOT_NAME;
+  }
+
+  // 拒绝连接
+  private rejectWebSocket(reason: string): Response {
+    const webSocketPair = new WebSocketPair();
+    const [client, server] = [webSocketPair[0], webSocketPair[1]];
+    this.state.acceptWebSocket(server);
+    server.send(`[连接拒绝]: ${reason}`);
+    server.close(1008, reason);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // 鉴权
+  private authenticate(name: string, secret: string | null): string | null {
+    if (!this.env.USER_SECRETS) {
+      return "系统严重错误: 管理员未配置 USER_SECRETS 环境变量";
+    }
+
+    let allowedUsers: Record<string, string>;
+    try {
+      allowedUsers = JSON.parse(this.env.USER_SECRETS);
+    } catch {
+      return "服务器配置错误: USER_SECRETS 格式无效";
+    }
+
+    if (!allowedUsers.hasOwnProperty(name)) {
+      return `用户 '${name}' 不在名单中`;
+    }
+    if (secret !== allowedUsers[name]) {
+      return "密码错误";
+    }
+
+    return null; // 鉴权通过
+  }
+
+  // HTTP 请求处理入口
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname !== "/websocket") {
+      return new Response("EMO Robot Running. 🤖", { status: 200 });
+    }
+
+    const params = url.searchParams;
+    const userName = params.get("name");
+    const secret = params.get("secret");
+
+    if (!userName) {
+      return this.rejectWebSocket("必须提供 'name' 参数");
+    }
+
+    // 鉴权
+    const authError = this.authenticate(userName, secret);
+    if (authError) {
+      return this.rejectWebSocket(authError);
+    }
+
+    // 检查是否已有活跃连接
+    if (this.state.getWebSockets().length > 0) {
+      return this.rejectWebSocket("当前机器人正在与其他用户对话中，请稍后再试");
+    }
+
+    // 接受连接
+    const webSocketPair = new WebSocketPair();
+    const [client, server] = [webSocketPair[0], webSocketPair[1]];
+
+    const attachment: WebSocketAttachment = {
+      name: userName,
+      id: crypto.randomUUID(),
+      joinedAt: Date.now(),
+      lastMessageAt: 0,
+    };
+
+    server.serializeAttachment(JSON.stringify(attachment));
+    this.state.acceptWebSocket(server);
+
+    // 欢迎消息
+    this.memory.add("系统", `${userName} 已连接`, "user");
+    server.send(`[${this.name}]: 你好 ${userName}！我是你的 AI 助手 ${this.name}。有什么我可以帮你的吗？`);
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // WebSocket 消息处理
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const attachmentStr = ws.deserializeAttachment();
+    if (!attachmentStr) return;
+
+    const attachment = JSON.parse(attachmentStr) as WebSocketAttachment;
+    const { name, lastMessageAt } = attachment;
+
+    // 速率限制
+    const now = Date.now();
+    if (now - lastMessageAt < RATE_LIMIT_MS) {
+      ws.send("[系统提示]: 说话太快了，请休息一下。");
+      return;
+    }
+
+    attachment.lastMessageAt = now;
+    ws.serializeAttachment(JSON.stringify(attachment));
+
+    const userMsg = decodeMessage(message).trim();
+
+    // 消息验证
+    if (!userMsg) {
+      ws.send("[系统提示]: 消息不能为空。");
+      return;
+    }
+    if (userMsg.length > MAX_MESSAGE_LENGTH) {
+      ws.send("[系统提示]: 消息过长。");
+      return;
+    }
+
+    // 记录用户消息
+    this.memory.add(name, userMsg, "user");
+
+    // 处理 AI 回复
+    this.state.waitUntil(this.reply(name, ws));
+  }
+
+  // 生成回复
+  private async reply(userName: string, ws: WebSocket): Promise<void> {
+    try {
+      const answer = await think(
+        this.env.AI,
+        userName,
+        this.memory.getHistory(),
+        this.name
+      );
+      this.memory.add(this.name, answer, "assistant");
+      ws.send(`[${this.name}]: ${answer}`);
+    } catch (error) {
+      console.error("AI 处理错误:", error);
+      ws.send("[系统]: 抱歉，AI 处理请求时出错了，请稍后再试。");
+    }
+  }
+
+  // 连接关闭
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    const attachmentStr = ws.deserializeAttachment();
+    if (attachmentStr) {
+      const { name } = JSON.parse(attachmentStr) as WebSocketAttachment;
+      console.log(`用户 ${name} 已断开连接，代码: ${code}, 原因: ${reason}`);
+      this.memory.add("系统", `${name} 已断开连接`, "user");
+    }
+  }
+}

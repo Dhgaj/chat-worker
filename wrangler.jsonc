@@ -11,14 +11,14 @@
 	  "bindings": [
 		{
 		  "name": "AI_ROBOT",
-		  "class_name": "AIRobot"
+		  "class_name": "Robot"
 		}
 	  ]
 	},
 	"migrations": [
 	  {
 		"tag": "v1",
-		"new_sqlite_classes": ["AI_ROBOT"]
+		"new_sqlite_classes": ["Robot"]
 	  }
 	],
 	"ai": {

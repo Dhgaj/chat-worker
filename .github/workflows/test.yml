@@ -2,7 +2,7 @@ name: Test
 
 on:
   push:
-    branches: ["main", "feature/ai-robot"]
+    branches: ["main"]
   pull_request:
   workflow_dispatch:
 
