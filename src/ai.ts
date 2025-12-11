@@ -1,13 +1,14 @@
 // AI 服务 (Prompt 工程)
-
-import { Ai, ChatMessage } from "../types";
-import { AI_MODEL } from "../config";
-import { cleanAiResponse } from "../utils";
+import { Ai, ChatMessage } from "./types";
+import { AI_MODEL } from "./config";
+import { cleanAiResponse } from "./utils";
+import { prompts } from "./prompts";
 
 export async function askJarvis(
   ai: Ai,
   userName: string,
-  history: ChatMessage[]
+  history: ChatMessage[],
+  robotName: string 
 ): Promise<string> {
   let aiText = "";
 
@@ -18,17 +19,13 @@ export async function askJarvis(
       hour12: false,
     });
 
-    const systemPrompt = `你是一个智能群聊助手 "Jarvis"。
+    const systemPrompt = prompts.system({
+      timeString,
+      userName,
+      // 传递机器人名字
+      robotName,  
+    });
     
-    【环境信息】
-    - 当前时间: ${timeString}
-    - 提问者: "${userName}"
-    
-    【重要规则】
-    1. 直接回复内容，不要加 "[Jarvis]:" 前缀。
-    2. 语言风格：自然、简洁、乐于助人。
-    3. 如果被问时间，请直接回答当前时间。`;
-
     const messagesToSend = [
       { role: "system", content: systemPrompt },
       ...history,

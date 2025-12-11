@@ -1,5 +1,5 @@
 {
-	"name": "chat-worker",
+	"name": "ai-robot-worker",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-12-07",
 	"compatibility_flags": ["nodejs_compat"],
@@ -10,21 +10,18 @@
 	"durable_objects": {
 	  "bindings": [
 		{
-		  "name": "CHAT_ROOM",
-		  "class_name": "ChatRoom"
+		  "name": "AI_ROBOT",
+		  "class_name": "AIRobot"
 		}
 	  ]
 	},
-
 	"migrations": [
 	  {
 		"tag": "v1",
-		"new_sqlite_classes": ["ChatRoom"]
+		"new_sqlite_classes": ["AI_ROBOT"]
 	  }
 	],
-
 	"ai": {
 		"binding": "AI"
 	}
-
   }

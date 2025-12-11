@@ -1,11 +1,13 @@
-# Chat Worker
+# AI 机器人
 
-一个基于 Cloudflare Workers 的实时聊天应用，使用 Durable Objects 实现实时通信功能。
+一个基于 Cloudflare Workers 的 AI 机器人项目，使用 Durable Objects 实现实时通信功能。
 
 ## ✨ 功能特性
 
-- 基于 WebSocket 的实时聊天
-- 用户认证与授权
+- 单用户 AI 对话
+- 对话历史记录
+- 用户认证
+- 支持长文本处理与授权
 - 消息广播
 - AI 助手集成
 
@@ -78,10 +80,18 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
 ```
 .
 ├── src/
-│   └── index.ts         # 主应用入口
-├── test/                # 测试文件
+│   ├── index.ts         # 主应用入口
+│   ├── ai-robot.ts      # AI 机器人 Durable Object 实现
+│   ├── ai.ts            # AI 服务集成
+│   ├── config.ts        # 应用配置
+│   ├── prompts.ts       # AI 提示词模板
+│   ├── types.ts         # 类型定义
+│   └── utils.ts         # 工具函数
+├── .dev.vars.example    # 环境变量示例
 ├── .gitignore
 ├── package.json
+├── README.md
+├── run.sh               # 开发环境启动脚本
 ├── tsconfig.json
 └── wrangler.jsonc       # Cloudflare Workers 配置
 ```
@@ -99,9 +109,9 @@ wscat -c "ws://localhost:8787/ws?name=张三&secret=pass123"
   "compatibility_date": "2025-12-07",
   "durable_objects": {
     "bindings": [
-      {
-        "name": "CHAT_ROOM",
-        "class_name": "ChatRoom"
+ {
+        "name": "AI_ROBOT",
+        "class_name": "AIRobot"
       }
     ]
   }

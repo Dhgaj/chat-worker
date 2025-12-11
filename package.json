@@ -11,6 +11,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"@cloudflare/workers-types": "^4.20251211.0",
 		"@types/cloudflare": "^2.7.15",
 		"typescript": "^5.5.2",
 		"vitest": "~3.2.0",
@@ -21,7 +22,6 @@
 	"directories": {
 		"test": "test"
 	},
-	"dependencies": {},
 	"engines": {
 		"node": ">=20"
 	},

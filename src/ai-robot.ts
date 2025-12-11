@@ -1,45 +1,45 @@
-// Durable Object 核心类
-
-import { DurableObject } from "cloudflare:workers";
+// AI 机器人核心类
+/// <reference types="@cloudflare/workers-types" />
 import { Env, ChatMessage, WebSocketAttachment } from "./types";
-import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS } from "./config";
+import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS, DEFAULT_ROBOT_NAME } from "./config";
 import { decodeMessage } from "./utils";
-import { askJarvis } from "./services/ai";
+import { askJarvis } from "./ai";
 
-export class ChatRoom extends DurableObject<Env> {
+// 扩展 WebSocket 类型以包含自定义方法
+declare global {
+  interface WebSocket {
+    serializeAttachment(attachment: string): void;
+    deserializeAttachment(): string | null;
+  }
+}
+
+export class AIRobot implements DurableObject {
   history: ChatMessage[] = [];
 
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
+  private state: DurableObjectState;
+  private env: Env;
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this.env = env;
   }
 
-  // 广播消息
-  broadcast(message: string) {
-    const websockets = this.ctx.getWebSockets();
-    for (const client of websockets) {
-      if (client.readyState !== WebSocket.OPEN) {
-        try { client.close(1011, "stale connection"); } catch {}
-        continue;
-      }
-      try {
-        client.send(message);
-      } catch {
-        try { client.close(1011, "failed to deliver"); } catch {}
-      }
-    }
+  // 获取机器人名字（从环境变量或使用默认值）
+  private getRobotName(): string {
+    return this.env.AI_ROBOT_NAME || DEFAULT_ROBOT_NAME;
   }
 
   // 拒绝连接辅助函数
   rejectWebSocket(reason: string): Response {
     const webSocketPair = new WebSocketPair();
-    const [client, server] = Object.values(webSocketPair);
-    this.ctx.acceptWebSocket(server);
+    const [client, server] = [webSocketPair[0], webSocketPair[1]];
+    this.state.acceptWebSocket(server);
     server.send(`[连接拒绝]: ${reason}`);
     server.close(1008, reason);
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  // HTTP 入口 (鉴权与升级)
+  // HTTP 请求处理入口
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
@@ -69,19 +69,15 @@ let allowedUsers: Record<string, string> = {};
     if (!allowedUsers.hasOwnProperty(name)) return this.rejectWebSocket(`用户 '${name}' 不在名单中`);
     if (secret !== allowedUsers[name]) return this.rejectWebSocket("密码错误");
 
-    // 检查重复登录
-    const activeWebSockets = this.ctx.getWebSockets();
-    for (const existingWS of activeWebSockets) {
-      const attachmentStr = existingWS.deserializeAttachment();
-      if (attachmentStr) {
-        const info = JSON.parse(attachmentStr as string) as WebSocketAttachment;
-        if (info.name === name) return this.rejectWebSocket(`用户 '${name}' 已经在线`);
-      }
+    // 检查是否已有活跃连接
+    const activeConnections = this.state.getWebSockets();
+    if (activeConnections.length > 0) {
+      return this.rejectWebSocket("当前机器人正在与其他用户对话中，请稍后再试");
     }
 
     // 接受连接
     const webSocketPair = new WebSocketPair();
-    const [client, server] = Object.values(webSocketPair);
+    const [client, server] = [webSocketPair[0], webSocketPair[1]];
 
     const initialAttachment: WebSocketAttachment = {
       name: name!,
@@ -91,19 +87,17 @@ let allowedUsers: Record<string, string> = {};
     };
 
     server.serializeAttachment(JSON.stringify(initialAttachment));
-    this.ctx.acceptWebSocket(server);
+    this.state.acceptWebSocket(server);
     
-    // 入场通知
-    const welcomeMsg = `[系统通知]: 欢迎 ${name} 加入房间！`;
-    this.broadcast(welcomeMsg);
-    this.recordHistory("系统", `欢迎 ${name} 加入房间`, "user");
-
-    server.send(`[系统提示]: 👋 你好 ${name}！我是 Jarvis。@Jarvis 或 Jarvis 可呼叫我。`);
+    // 发送欢迎消息
+    const robotName = this.getRobotName();
+    this.recordHistory("系统", `${name} 已连接`, "user");
+    server.send(`[${robotName}]: 你好 ${name}！我是你的 AI 助手 ${robotName}。有什么我可以帮你的吗？`);
 
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  // 记录历史
+  // 记录对话历史
   recordHistory(name: string, content: string, role: "user" | "assistant") {
     const finalContent = role === "user" ? `[${name}]: ${content}` : content;
     this.history.push({ role: role, content: finalContent });
@@ -137,47 +131,32 @@ let allowedUsers: Record<string, string> = {};
     if (!trimmed) { ws.send("[系统提示]: 消息不能为空。"); return; }
     if (trimmed.length > MAX_MESSAGE_LENGTH) { ws.send(`[系统提示]: 消息过长。`); return; }
 
-    // 消息广播和记录
-    this.broadcast(`[${name}]: ${trimmed}`);
+    // 记录用户消息
     this.recordHistory(name, trimmed, "user");
 
-    const lowerCaseMsg = trimmed.toLowerCase();
-
-    // Commands
-    if (lowerCaseMsg === "help" || lowerCaseMsg === "帮助") {
-      ws.send(`[系统提示]: 直接聊天即可。@Jarvis 呼叫 AI。`);
-      return;
-    }
-
-    if (trimmed === "/who") {
-        const count = this.ctx.getWebSockets().length;
-        ws.send(`[系统提示]: 当前在线人数: ${count} 人`);
-        return;
-    }
-
-    // AI 调用
-    if (lowerCaseMsg.startsWith("jarvis") || lowerCaseMsg.startsWith("@jarvis")) {
-      // 封装 AI 调用逻辑
-      this.ctx.waitUntil(this.handleAiReply(name, trimmed));
-    }
+      // 处理 AI 回复
+    this.state.waitUntil(this.handleAiReply(name, trimmed, ws));
   }
 
   // 处理 AI 回复的辅助方法
-  async handleAiReply(name: string, question: string) {
-      const answer = await askJarvis(this.env.AI, name, this.history);
-      this.recordHistory("Jarvis", answer, "assistant");
-      this.broadcast(`[Jarvis]: ${answer}`);
+  async handleAiReply(name: string, question: string, ws: WebSocket): Promise<void> {
+    try {
+      const robotName = this.getRobotName();
+      const answer = await askJarvis(this.env.AI, name, this.history, robotName);
+      this.recordHistory(robotName, answer, "assistant");
+      ws.send(`[${robotName}]: ${answer}`);
+    } catch (error) {
+      console.error("AI 处理错误:", error);
+      ws.send("[系统]: 抱歉，AI 处理请求时出错了，请稍后再试。");
+    }
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
     const attachmentStr = ws.deserializeAttachment();
     if (attachmentStr) {
-      const { name } = JSON.parse(attachmentStr as string) as WebSocketAttachment;
-      if (code !== 1008) {
-        const leaveMsg = `[系统通知]: ${name} 离开了房间`;
-        this.broadcast(leaveMsg);
-        this.recordHistory("系统", leaveMsg, "user");
-      }
+      const { name } = JSON.parse(attachmentStr) as WebSocketAttachment;
+      console.log(`用户 ${name} 已断开连接，代码: ${code}, 原因: ${reason}`);
+      this.recordHistory("系统", `${name} 已断开连接`, "user");
     }
   }
 }

@@ -20,8 +20,10 @@ export interface Ai {
 // 环境变量接口
 export interface Env {
   // DurableObjectNamespace 是全局类型
-  CHAT_ROOM: DurableObjectNamespace;
+  AI_ROBOT: DurableObjectNamespace;
   USER_SECRETS: string;
+  // 机器人名字，可通过 .dev.vars 配置
+  AI_ROBOT_NAME: string;  
   AI: Ai;
 }
 

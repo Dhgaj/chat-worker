@@ -1,5 +1,9 @@
 # Cloudflare Workers 环境变量示例
 
+# AI 机器人名称（可自定义，默认为 "Jarvis"）
+AI_ROBOT_NAME=EMO
+
+# 用户凭证 (JSON 格式)
 # 格式：变量名=值
 # 注意：JSON 字符串最好写在一行，或者小心转义
 USER_SECRETS={"张三":"pass123","李四":"secret456"}
