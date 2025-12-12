@@ -1,33 +1,34 @@
 # Cloudflare Workers 环境变量示例
+## !请根据具体情况设置
 
-# AI 机器人名称（可自定义，默认为 "EMO"）
+# === AI 机器人名称设置（默认为 "EMO"）=== 
 AI_ROBOT_NAME=EMO
 
-# 用户凭证 (JSON 格式)
+# === 用户凭证 (JSON 格式) === 
 USER_SECRETS={"张三":"pass123","李四":"secret456"}
 
-# ==================== AI 提供商配置 ====================
-# AI 提供商选择: "cloudflare" | "ollama" | "openai" | "gemini"（默认 cloudflare）
+# === AI 提供商配置 ===
+# *** AI 提供商选择: "cloudflare" | "ollama" | "openai" | "gemini"（默认 cloudflare）***
 AI_PROVIDER=cloudflare
 
-# Ollama 配置（当 AI_PROVIDER=ollama 时生效）
-# 本地 Ollama:
+# ** Ollama 配置（当 AI_PROVIDER=ollama 时生效）**
+# * 本地 Ollama *
 # OLLAMA_HOST=http://localhost:11434
 # OLLAMA_MODEL=llama3
-#
-# Ollama 官方云端 API:
+
+# * Ollama 官方云端模型 * 
 # OLLAMA_HOST=https://ollama.com
-# OLLAMA_MODEL=gpt-oss:120b
+# OLLAMA_MODEL=gpt-oss:20b
 # OLLAMA_API_KEY=your-api-key
 
-# OpenAI 兼容 API 配置（当 AI_PROVIDER=openai 时生效）
+# ** OpenAI 兼容 API 配置（当 AI_PROVIDER=openai 时生效）**
 # 支持: OpenAI、DeepSeek、通义千问、Moonshot 等
-# OPENAI_API_KEY=sk-xxx
-# OPENAI_HOST=https://api.openai.com          # OpenAI
-# OPENAI_HOST=https://api.deepseek.com        # DeepSeek  
+# OPENAI_HOST=https://api.openai.com                          # OpenAI
+# OPENAI_HOST=https://api.deepseek.com                        # DeepSeek  
 # OPENAI_HOST=https://dashscope.aliyuncs.com/compatible-mode  # 通义千问
 # OPENAI_MODEL=gpt-3.5-turbo
+# OPENAI_API_KEY=sk-xxx
 
-# Google Gemini 配置（当 AI_PROVIDER=gemini 时生效）
+# ** Google Gemini 配置（当 AI_PROVIDER=gemini 时生效）**
 # GEMINI_API_KEY=AIzaSy...
-# GEMINI_MODEL=gemini-1.5-flash               # 或 gemini-1.5-pro, gemini-2.0-flash-exp
+# GEMINI_MODEL=gemini-1.5-flash               
