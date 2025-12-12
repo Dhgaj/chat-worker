@@ -4,16 +4,30 @@
 AI_ROBOT_NAME=EMO
 
 # 用户凭证 (JSON 格式)
-# 格式：变量名=值
-# 注意：JSON 字符串最好写在一行，或者小心转义
 USER_SECRETS={"张三":"pass123","李四":"secret456"}
 
-# AI 提供商配置 
-# AI 提供商选择: "cloudflare" 或 "ollama"（默认 cloudflare）
+# ==================== AI 提供商配置 ====================
+# AI 提供商选择: "cloudflare" | "ollama" | "openai" | "gemini"（默认 cloudflare）
 AI_PROVIDER=cloudflare
 
 # Ollama 配置（当 AI_PROVIDER=ollama 时生效）
-# 请根据端口号进行更改
-# OLLAMA_HOST=http://your-server:11434
-# 请根据你使用的模型进行更改
-# OLLAMA_MODEL=llama3          
+# 本地 Ollama:
+# OLLAMA_HOST=http://localhost:11434
+# OLLAMA_MODEL=llama3
+#
+# Ollama 官方云端 API:
+# OLLAMA_HOST=https://ollama.com
+# OLLAMA_MODEL=gpt-oss:120b
+# OLLAMA_API_KEY=your-api-key
+
+# OpenAI 兼容 API 配置（当 AI_PROVIDER=openai 时生效）
+# 支持: OpenAI、DeepSeek、通义千问、Moonshot 等
+# OPENAI_API_KEY=sk-xxx
+# OPENAI_HOST=https://api.openai.com          # OpenAI
+# OPENAI_HOST=https://api.deepseek.com        # DeepSeek  
+# OPENAI_HOST=https://dashscope.aliyuncs.com/compatible-mode  # 通义千问
+# OPENAI_MODEL=gpt-3.5-turbo
+
+# Google Gemini 配置（当 AI_PROVIDER=gemini 时生效）
+# GEMINI_API_KEY=AIzaSy...
+# GEMINI_MODEL=gemini-1.5-flash               # 或 gemini-1.5-pro, gemini-2.0-flash-exp

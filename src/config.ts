@@ -12,7 +12,7 @@ export const DEFAULT_ROBOT_NAME = "EMO";
 export const MEMORY_MAX_SIZE = 100;
 // AI 配置
 // AI 提供商类型
-export type AIProvider = "cloudflare" | "ollama";
+export type AIProvider = "cloudflare" | "ollama" | "openai" | "gemini";
 // 默认 AI 提供商
 export const DEFAULT_AI_PROVIDER: AIProvider = "cloudflare";
 // Cloudflare Workers AI 模型
@@ -20,5 +20,10 @@ export const CLOUDFLARE_MODEL = "@cf/meta/llama-3-8b-instruct";
 // Ollama 默认配置
 export const OLLAMA_DEFAULT_HOST = "http://localhost:11434";
 export const OLLAMA_DEFAULT_MODEL = "llama3";
+// OpenAI 兼容 API 默认配置（支持 OpenAI、DeepSeek、通义千问等）
+export const OPENAI_DEFAULT_HOST = "https://api.openai.com";
+export const OPENAI_DEFAULT_MODEL = "gpt-3.5-turbo";
+// Google Gemini 默认配置
+export const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
 
 

@@ -24,10 +24,22 @@ export interface Env {
   AI_ROBOT_NAME: string;
   AI: Ai;
   
-  // AI 提供商配置
-  AI_PROVIDER?: string;        
-  OLLAMA_HOST?: string;        
-  OLLAMA_MODEL?: string;    
+  // AI 提供商配置: "cloudflare" | "ollama" | "openai" | "gemini"
+  AI_PROVIDER?: string;
+  
+  // Ollama 配置
+  OLLAMA_HOST?: string;
+  OLLAMA_MODEL?: string;
+  OLLAMA_API_KEY?: string;      // 可选，用于需要认证的 Ollama 服务
+  
+  // OpenAI 兼容 API 配置（支持 OpenAI、DeepSeek、通义千问等）
+  OPENAI_API_KEY?: string;
+  OPENAI_HOST?: string;
+  OPENAI_MODEL?: string;
+  
+  // Google Gemini 配置
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL?: string;
 }
 
 // WebSocket 附加信息
