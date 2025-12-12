@@ -1,9 +1,9 @@
 // [身体] Durable Object (连接保持、鉴权)
 /// <reference types="@cloudflare/workers-types" />
 import { Env, WebSocketAttachment } from "./types";
-import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS, DEFAULT_ROBOT_NAME } from "./config";
+import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS, DEFAULT_ROBOT_NAME, MEMORY_MAX_SIZE } from "./config";
 import { decodeMessage } from "./utils";
-import { Memory, think } from "./brain";
+import { Memory, think, getAIConfig, AIConfig } from "./brain";
 
 // 扩展 WebSocket 类型以包含自定义方法
 declare global {
@@ -17,11 +17,26 @@ export class Robot implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
   private memory: Memory;
+  private aiConfig: AIConfig;
+  private initialized: boolean = false;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
-    this.memory = new Memory(50);
+    this.memory = new Memory(MEMORY_MAX_SIZE);
+    this.aiConfig = getAIConfig(env);
+    
+    // 绑定持久化存储
+    this.memory.bindStorage(state.storage);
+    
+    console.log(`[Robot] AI 提供商: ${this.aiConfig.provider}`);
+  }
+
+  // 确保记忆已加载
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    await this.memory.load();
+    this.initialized = true;
   }
 
   // 获取机器人名字
@@ -64,6 +79,9 @@ export class Robot implements DurableObject {
 
   // HTTP 请求处理入口
   async fetch(request: Request): Promise<Response> {
+    // 确保记忆已加载
+    await this.ensureInitialized();
+    
     const url = new URL(request.url);
 
     if (url.pathname !== "/websocket") {
@@ -104,7 +122,7 @@ export class Robot implements DurableObject {
     this.state.acceptWebSocket(server);
 
     // 欢迎消息
-    this.memory.add("系统", `${userName} 已连接`, "user");
+    await this.memory.addAndSave("系统", `${userName} 已连接`, "user");
     server.send(`[${this.name}]: 你好 ${userName}！我是你的 AI 助手 ${this.name}。有什么我可以帮你的吗？`);
 
     return new Response(null, { status: 101, webSocket: client });
@@ -141,7 +159,7 @@ export class Robot implements DurableObject {
     }
 
     // 记录用户消息
-    this.memory.add(name, userMsg, "user");
+    await this.memory.addAndSave(name, userMsg, "user");
 
     // 处理 AI 回复
     this.state.waitUntil(this.reply(name, ws));
@@ -151,12 +169,12 @@ export class Robot implements DurableObject {
   private async reply(userName: string, ws: WebSocket): Promise<void> {
     try {
       const answer = await think(
-        this.env.AI,
+        this.aiConfig,
         userName,
         this.memory.getHistory(),
         this.name
       );
-      this.memory.add(this.name, answer, "assistant");
+      await this.memory.addAndSave(this.name, answer, "assistant");
       ws.send(`[${this.name}]: ${answer}`);
     } catch (error) {
       console.error("AI 处理错误:", error);
@@ -170,7 +188,7 @@ export class Robot implements DurableObject {
     if (attachmentStr) {
       const { name } = JSON.parse(attachmentStr) as WebSocketAttachment;
       console.log(`用户 ${name} 已断开连接，代码: ${code}, 原因: ${reason}`);
-      this.memory.add("系统", `${name} 已断开连接`, "user");
+      await this.memory.addAndSave("系统", `${name} 已断开连接`, "user");
     }
   }
 }

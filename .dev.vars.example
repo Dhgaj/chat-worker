@@ -1,9 +1,19 @@
 # Cloudflare Workers 环境变量示例
 
-# AI 机器人名称（可自定义，默认为 "Jarvis"）
+# AI 机器人名称（可自定义，默认为 "EMO"）
 AI_ROBOT_NAME=EMO
 
 # 用户凭证 (JSON 格式)
 # 格式：变量名=值
 # 注意：JSON 字符串最好写在一行，或者小心转义
 USER_SECRETS={"张三":"pass123","李四":"secret456"}
+
+# AI 提供商配置 
+# AI 提供商选择: "cloudflare" 或 "ollama"（默认 cloudflare）
+AI_PROVIDER=cloudflare
+
+# Ollama 配置（当 AI_PROVIDER=ollama 时生效）
+# 请根据端口号进行更改
+# OLLAMA_HOST=http://your-server:11434
+# 请根据你使用的模型进行更改
+# OLLAMA_MODEL=llama3          

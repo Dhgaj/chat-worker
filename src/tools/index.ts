@@ -36,7 +36,7 @@ export async function executeTool(name: string, ...args: any[]): Promise<any> {
   return tool.execute(...args);
 }
 
-// ==================== 内置工具 ====================
+// 内置工具
 
 // 获取当前时间
 registerTool({

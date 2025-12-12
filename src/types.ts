@@ -23,6 +23,11 @@ export interface Env {
   USER_SECRETS: string;
   AI_ROBOT_NAME: string;
   AI: Ai;
+  
+  // AI 提供商配置
+  AI_PROVIDER?: string;        
+  OLLAMA_HOST?: string;        
+  OLLAMA_MODEL?: string;    
 }
 
 // WebSocket 附加信息
