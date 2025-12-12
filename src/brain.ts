@@ -1,7 +1,8 @@
 // [大脑] 思考核心、记忆管理
-import { Ai, ChatMessage, Env } from "./types";
+import { Ai, ChatMessage, Env, AIToolCall, ToolDefinitionForAI } from "./types";
 import { 
   CLOUDFLARE_MODEL, 
+  CLOUDFLARE_TOOL_MODEL,
   OLLAMA_DEFAULT_HOST, 
   OLLAMA_DEFAULT_MODEL,
   OPENAI_DEFAULT_HOST,
@@ -12,6 +13,7 @@ import {
 } from "./config";
 import { cleanAiResponse } from "./utils";
 import { getSystemPrompt } from "./prompts";
+import { getToolDefinitions, executeTool } from "./tools";
 
 // 存储键名
 const MEMORY_STORAGE_KEY = "chat_history";
@@ -83,9 +85,7 @@ export class Memory {
   }
 }
 
-// AI 调用
-
-// AI 配置接口
+// AI 配置
 export interface AIConfig {
   provider: AIProvider;
   cloudflareAI?: Ai;
@@ -97,9 +97,9 @@ export interface AIConfig {
   openaiModel?: string;
   geminiApiKey?: string;
   geminiModel?: string;
+  enableToolCalling?: boolean;
 }
 
-// 从环境变量构建 AI 配置
 export function getAIConfig(env: Env): AIConfig {
   const provider = (env.AI_PROVIDER as AIProvider) || DEFAULT_AI_PROVIDER;
   
@@ -114,46 +114,68 @@ export function getAIConfig(env: Env): AIConfig {
     openaiModel: env.OPENAI_MODEL || OPENAI_DEFAULT_MODEL,
     geminiApiKey: env.GEMINI_API_KEY,
     geminiModel: env.GEMINI_MODEL || GEMINI_DEFAULT_MODEL,
+    enableToolCalling: env.ENABLE_TOOL_CALLING !== "false",
   };
 }
 
-// 调用 Cloudflare Workers AI
+// AI 响应结构
+interface AIResponse {
+  content: string;
+  toolCalls?: AIToolCall[];
+}
+
+// AI 调用函数
 async function callCloudflareAI(
   ai: Ai,
-  messages: { role: string; content: string }[]
-): Promise<string> {
-  const response = await ai.run(CLOUDFLARE_MODEL, {
+  messages: { role: string; content: string }[],
+  tools?: ToolDefinitionForAI[]
+): Promise<AIResponse> {
+  const model = tools && tools.length > 0 ? CLOUDFLARE_TOOL_MODEL : CLOUDFLARE_MODEL;
+  
+  const response = await ai.run(model, {
     messages: messages as any,
     temperature: 0.6,
     max_tokens: 256,
+    tools: tools as any,
   });
-  return response.response || "";
+  
+  const responseAny = response as any;
+  
+  // Cloudflare 的 tool_calls 结构可能不同，需要做转换
+  if (responseAny.tool_calls && responseAny.tool_calls.length > 0) {
+    const toolCalls: AIToolCall[] = responseAny.tool_calls
+      .filter((tc: any) => tc && tc.name) // 过滤无效的工具调用
+      .map((tc: any) => ({
+        function: {
+          name: tc.name,
+          arguments: tc.arguments || {},
+        },
+      }));
+    
+    if (toolCalls.length > 0) {
+      return { content: "", toolCalls };
+    }
+  }
+  
+  return { content: response.response || "" };
 }
 
-// 调用 Ollama API（支持本地和云端）
 async function callOllamaAI(
   host: string,
   model: string,
   messages: { role: string; content: string }[],
-  apiKey?: string
-): Promise<string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  apiKey?: string,
+  tools?: ToolDefinitionForAI[]
+): Promise<AIResponse> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
   
-  // 如果有 API Key，添加认证头
   if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey}`;
   }
 
-  // 判断是否是 Ollama 官方云端 API
   const isOllamaCloud = host.includes("ollama.com");
   
-  let response: Response;
-  
   if (isOllamaCloud) {
-    // Ollama 云端 API 使用 /api/generate 和 prompt 格式
-    // 将 messages 转换为单个 prompt
     const prompt = messages
       .map(m => {
         if (m.role === "system") return `System: ${m.content}`;
@@ -162,14 +184,10 @@ async function callOllamaAI(
       })
       .join("\n\n");
 
-    response = await fetch(`${host}/api/generate`, {
+    const response = await fetch(`${host}/api/generate`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        model,
-        prompt,
-        stream: false,
-      }),
+      body: JSON.stringify({ model, prompt, stream: false }),
     });
 
     if (!response.ok) {
@@ -178,51 +196,66 @@ async function callOllamaAI(
     }
 
     const data = await response.json() as { response?: string };
-    return data.response || "";
+    return { content: data.response || "" };
   } else {
-    // 本地/自托管 Ollama 使用 /api/chat 和 messages 格式
-    response = await fetch(`${host}/api/chat`, {
+    const requestBody: any = {
+      model,
+      messages,
+      stream: false,
+      options: { temperature: 0.6, num_predict: 256 },
+    };
+    
+    if (tools && tools.length > 0) {
+      requestBody.tools = tools;
+    }
+    
+    const response = await fetch(`${host}/api/chat`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false,
-        options: {
-          temperature: 0.6,
-          num_predict: 256,
-        },
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       throw new Error(`Ollama API 错误: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json() as { message?: { content?: string } };
-    return data.message?.content || "";
+    const data = await response.json() as { 
+      message?: { content?: string; tool_calls?: AIToolCall[] } 
+    };
+    
+    if (data.message?.tool_calls && data.message.tool_calls.length > 0) {
+      return { content: "", toolCalls: data.message.tool_calls };
+    }
+    
+    return { content: data.message?.content || "" };
   }
 }
 
-// 调用 OpenAI 兼容 API（支持 OpenAI、DeepSeek、通义千问等）
 async function callOpenAI(
   host: string,
   apiKey: string,
   model: string,
-  messages: { role: string; content: string }[]
-): Promise<string> {
+  messages: { role: string; content: string }[],
+  tools?: ToolDefinitionForAI[]
+): Promise<AIResponse> {
+  const requestBody: any = {
+    model,
+    messages,
+    temperature: 0.6,
+    max_tokens: 256,
+  };
+  
+  if (tools && tools.length > 0) {
+    requestBody.tools = tools;
+  }
+  
   const response = await fetch(`${host}/v1/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.6,
-      max_tokens: 256,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -231,40 +264,63 @@ async function callOpenAI(
   }
 
   const data = await response.json() as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { 
+      message?: { 
+        content?: string;
+        tool_calls?: { id: string; type: string; function: { name: string; arguments: string } }[];
+      } 
+    }[];
   };
-  return data.choices?.[0]?.message?.content || "";
+  
+  const message = data.choices?.[0]?.message;
+  
+  if (message?.tool_calls && message.tool_calls.length > 0) {
+    return {
+      content: "",
+      toolCalls: message.tool_calls.map(tc => ({
+        function: {
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments),
+        },
+      })),
+    };
+  }
+  
+  return { content: message?.content || "" };
 }
 
-// 调用 Google Gemini API
 async function callGeminiAI(
   apiKey: string,
   model: string,
-  messages: { role: string; content: string }[]
-): Promise<string> {
-  // Gemini API 格式转换：将 OpenAI 格式转为 Gemini 格式
+  messages: { role: string; content: string }[],
+  tools?: ToolDefinitionForAI[]
+): Promise<AIResponse> {
   const contents = messages
-    .filter(m => m.role !== "system") // system 消息单独处理
+    .filter(m => m.role !== "system")
     .map(m => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }]
     }));
   
-  // 提取 system 消息作为 systemInstruction
   const systemMessage = messages.find(m => m.role === "system");
   
   const requestBody: any = {
     contents,
-    generationConfig: {
-      temperature: 0.6,
-      maxOutputTokens: 256,
-    }
+    generationConfig: { temperature: 0.6, maxOutputTokens: 256 }
   };
   
   if (systemMessage) {
-    requestBody.systemInstruction = {
-      parts: [{ text: systemMessage.content }]
-    };
+    requestBody.systemInstruction = { parts: [{ text: systemMessage.content }] };
+  }
+  
+  if (tools && tools.length > 0) {
+    requestBody.tools = [{
+      functionDeclarations: tools.map(t => ({
+        name: t.function.name,
+        description: t.function.description,
+        parameters: t.function.parameters,
+      })),
+    }];
   }
 
   const response = await fetch(
@@ -282,12 +338,88 @@ async function callGeminiAI(
   }
 
   const data = await response.json() as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { 
+      content?: { 
+        parts?: { text?: string; functionCall?: { name: string; args: Record<string, any> } }[] 
+      } 
+    }[];
   };
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  
+  const parts = data.candidates?.[0]?.content?.parts;
+  
+  if (parts) {
+    for (const part of parts) {
+      if (part.functionCall) {
+        return {
+          content: "",
+          toolCalls: [{
+            function: {
+              name: part.functionCall.name,
+              arguments: part.functionCall.args,
+            },
+          }],
+        };
+      }
+    }
+  }
+  
+  return { content: parts?.[0]?.text || "" };
 }
 
-// 思考 - 调用 AI 生成回复
+
+// 统一 AI 调用接口
+async function callAI(
+  config: AIConfig,
+  messages: { role: string; content: string }[],
+  tools?: ToolDefinitionForAI[]
+): Promise<AIResponse> {
+  if (config.provider === "ollama") {
+    return callOllamaAI(config.ollamaHost!, config.ollamaModel!, messages, config.ollamaApiKey, tools);
+  } else if (config.provider === "openai") {
+    if (!config.openaiApiKey) throw new Error("OpenAI API Key 未配置");
+    return callOpenAI(config.openaiHost!, config.openaiApiKey, config.openaiModel!, messages, tools);
+  } else if (config.provider === "gemini") {
+    if (!config.geminiApiKey) throw new Error("Gemini API Key 未配置");
+    return callGeminiAI(config.geminiApiKey, config.geminiModel!, messages, tools);
+  } else {
+    if (!config.cloudflareAI) throw new Error("Cloudflare AI 未配置");
+    return callCloudflareAI(config.cloudflareAI, messages, tools);
+  }
+}
+
+// 工具调用执行
+async function executeToolCalls(toolCalls: AIToolCall[]): Promise<string> {
+  const results: string[] = [];
+  
+  for (const toolCall of toolCalls) {
+    // 安全检查
+    if (!toolCall?.function?.name) {
+      console.warn(`[Brain] 跳过无效的工具调用:`, toolCall);
+      continue;
+    }
+    
+    const name = toolCall.function.name;
+    let args = toolCall.function.arguments || {};
+    
+    if (typeof args === "string") {
+      try { args = JSON.parse(args); } catch { args = {}; }
+    }
+    
+    try {
+      const result = await executeTool(name, args as Record<string, any>);
+      results.push(`[${name}]: ${result}`);
+      console.log(`[Brain] 工具 ${name} 执行结果:`, result);
+    } catch (error) {
+      const err = error as Error;
+      results.push(`[${name}]: 执行失败 - ${err.message}`);
+      console.error(`[Brain] 工具 ${name} 执行失败:`, err);
+    }
+  }
+  
+  return results.join("\n");
+}
+
+// 思考 - 主入口
 export async function think(
   config: AIConfig,
   userName: string,
@@ -295,13 +427,10 @@ export async function think(
   robotName: string
 ): Promise<string> {
   try {
-    const now = new Date();
-    const timeString = now.toLocaleString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      hour12: false,
-    });
-
-    const systemPrompt = getSystemPrompt({ timeString, userName, robotName });
+    const hasToolCalling = config.enableToolCalling ?? true;
+    const tools = hasToolCalling ? getToolDefinitions() : undefined;
+    
+    const systemPrompt = getSystemPrompt({ userName, robotName, hasToolCalling });
     
     const messagesToSend = [
       { role: "system", content: systemPrompt },
@@ -309,46 +438,35 @@ export async function think(
     ];
 
     console.log(`*** AI Request [${config.provider}] ***`);
+    console.log(`[Brain] 工具调用: ${hasToolCalling ? "启用" : "禁用"}`);
     
-    let rawResponse: string;
+    // 第一次调用：可能返回工具调用
+    let response = await callAI(config, messagesToSend, tools);
     
-    if (config.provider === "ollama") {
-      rawResponse = await callOllamaAI(
-        config.ollamaHost!,
-        config.ollamaModel!,
-        messagesToSend,
-        config.ollamaApiKey
-      );
-    } else if (config.provider === "openai") {
-      if (!config.openaiApiKey) {
-        throw new Error("OpenAI API Key 未配置");
+    // 如果有工具调用，执行工具并进行第二次调用
+    if (response.toolCalls && response.toolCalls.length > 0) {
+      // 安全获取工具名称
+      const toolNames = response.toolCalls
+        .filter(tc => tc?.function?.name)
+        .map(tc => tc.function.name);
+      
+      console.log(`[Brain] AI 请求调用工具:`, toolNames);
+      
+      if (toolNames.length > 0) {
+        const toolResults = await executeToolCalls(response.toolCalls);
+        
+        const messagesWithToolResult = [
+          ...messagesToSend,
+          { role: "assistant", content: "我需要查询一些信息..." },
+          { role: "user", content: `[工具调用结果]\n${toolResults}\n\n请根据以上信息回答用户的问题。` },
+        ];
+        
+        response = await callAI(config, messagesWithToolResult, undefined);
       }
-      rawResponse = await callOpenAI(
-        config.openaiHost!,
-        config.openaiApiKey,
-        config.openaiModel!,
-        messagesToSend
-      );
-    } else if (config.provider === "gemini") {
-      if (!config.geminiApiKey) {
-        throw new Error("Gemini API Key 未配置");
-      }
-      rawResponse = await callGeminiAI(
-        config.geminiApiKey,
-        config.geminiModel!,
-        messagesToSend
-      );
-    } else {
-      // 默认使用 Cloudflare
-      if (!config.cloudflareAI) {
-        throw new Error("Cloudflare AI 未配置");
-      }
-      rawResponse = await callCloudflareAI(config.cloudflareAI, messagesToSend);
     }
 
-    console.log(`[Raw AI Response]: ${rawResponse}`);
-
-    const cleaned = cleanAiResponse(rawResponse);
+    console.log(`[Raw AI Response]: ${response.content}`);
+    const cleaned = cleanAiResponse(response.content);
     return cleaned || "Hmm... 我好像没听清。";
 
   } catch (error) {

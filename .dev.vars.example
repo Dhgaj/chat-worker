@@ -30,5 +30,6 @@ AI_PROVIDER=cloudflare
 # OPENAI_API_KEY=sk-xxx
 
 # ** Google Gemini 配置（当 AI_PROVIDER=gemini 时生效）**
+# 免费版的额度和速率有明显限制，不推荐使用
 # GEMINI_API_KEY=AIzaSy...
-# GEMINI_MODEL=gemini-1.5-flash               
+# GEMINI_MODEL=gemini-2.5-flash               

@@ -17,6 +17,8 @@ export type AIProvider = "cloudflare" | "ollama" | "openai" | "gemini";
 export const DEFAULT_AI_PROVIDER: AIProvider = "cloudflare";
 // Cloudflare Workers AI 模型
 export const CLOUDFLARE_MODEL = "@cf/meta/llama-3-8b-instruct";
+// Cloudflare 支持 Function Calling 的模型
+export const CLOUDFLARE_TOOL_MODEL = "@hf/nousresearch/hermes-2-pro-mistral-7b";
 // Ollama 默认配置
 export const OLLAMA_DEFAULT_HOST = "http://localhost:11434";
 export const OLLAMA_DEFAULT_MODEL = "llama3";
