@@ -1,7 +1,7 @@
 // 常量配置
 
 // 允许的最大消息长度
-export const MAX_MESSAGE_LENGTH = 1024;
+export const MAX_MESSAGE_LENGTH = 4096;
 // 速率限制的时间间隔
 export const RATE_LIMIT_MS = 1000;
 // AI 机器人实例 ID（Durable Object 标识符）

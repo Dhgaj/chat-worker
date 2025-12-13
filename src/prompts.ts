@@ -1,4 +1,5 @@
-// [提示词] Prompt 模板管理
+// Prompt 模板管理 
+// 提示词
 
 export interface SystemPromptParams {
   userName: string;
@@ -13,7 +14,7 @@ export function getSystemPrompt({ userName, robotName, hasToolCalling }: SystemP
 [工具使用说明]
 - 你可以使用工具来获取信息。当用户询问当前时间、日期等时，请调用 get_current_time 工具。
 - 只有当需要使用工具时才调用，不要在不需要时调用。
-- 工具调用后，请根据工具返回的结果自然地回答用户。`
+- 工具调用后，请根据工具返回的结果自然地回答用户，避免向用户暴露工具名称或调用过程。`
     : `
 [注意]
 - 如果被问到当前时间，请告知用户你暂时无法获取实时时间信息。`;

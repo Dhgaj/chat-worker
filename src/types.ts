@@ -1,56 +1,29 @@
 // 类型定义
 
-// AI 相关接口
+// Cloudflare AI 相关接口
 export interface AiTextGenerationInput {
-  messages: { role: string; content: string }[];
+  messages: { 
+    role: string; 
+    content: string; 
+    tool_call_id?: string;
+    tool_calls?: any[];
+    name?: string;
+  }[];
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
   stream?: boolean;
-  tools?: ToolDefinitionForAI[];
+  tools?: any[];
 }
 
+// AI 返回结构
 export interface AiTextGenerationOutput {
   response: string;
 }
 
+// AI 接口
 export interface Ai {
   run(model: string, inputs: AiTextGenerationInput): Promise<AiTextGenerationOutput>;
-}
-
-// Function Calling 相关类型
-
-// 工具定义（发送给 AI）
-export interface ToolDefinitionForAI {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: {
-      type: "object";
-      properties: Record<string, {
-        type: string;
-        description: string;
-        enum?: string[];
-      }>;
-      required: string[];
-    };
-  };
-}
-
-// AI 返回的工具调用
-export interface AIToolCall {
-  function: {
-    name: string;
-    arguments: Record<string, any> | string;  // 可能是对象或 JSON 字符串
-  };
-}
-
-// AI 响应消息（可能包含工具调用）
-export interface AIMessage {
-  role: string;
-  content: string;
-  tool_calls?: AIToolCall[];
 }
 
 // 环境变量接口
@@ -66,7 +39,7 @@ export interface Env {
   // Ollama 配置
   OLLAMA_HOST?: string;
   OLLAMA_MODEL?: string;
-  OLLAMA_API_KEY?: string;      // 可选，用于需要认证的 Ollama 服务
+  OLLAMA_API_KEY?: string;
   
   // OpenAI 兼容 API 配置（支持 OpenAI、DeepSeek、通义千问等）
   OPENAI_API_KEY?: string;
@@ -89,9 +62,21 @@ export interface WebSocketAttachment {
   lastMessageAt: number;
 }
 
+// 工具调用结构（通用）
+export interface ToolCall {
+  id?: string;
+  function: {
+    name: string;
+    arguments: Record<string, any> | string;
+  };
+}
+
 // 聊天记录结构
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
-  tool_name?: string;  // 用于 tool 角色的消息
+  tool_name?: string;
+  tool_call_id?: string;
+  name?: string;
+  tool_calls?: ToolCall[];
 }

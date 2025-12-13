@@ -3,7 +3,7 @@
 import { Env, WebSocketAttachment } from "./types";
 import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS, DEFAULT_ROBOT_NAME, MEMORY_MAX_SIZE } from "./config";
 import { decodeMessage } from "./utils";
-import { Memory, think, getAIConfig, AIConfig } from "./brain";
+import { Memory, think, getAIConfig, AIConfig, createProvider, IAIProvider } from "./brain";
 
 // 扩展 WebSocket 类型以包含自定义方法
 declare global {
@@ -13,18 +13,22 @@ declare global {
   }
 }
 
+// Durable Object: Robot
 export class Robot implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
   private memory: Memory;
   private aiConfig: AIConfig;
   private initialized: boolean = false;
+  private provider: IAIProvider;
+  private replyChain: Promise<void> = Promise.resolve();
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
     this.memory = new Memory(MEMORY_MAX_SIZE);
     this.aiConfig = getAIConfig(env);
+    this.provider = createProvider(this.aiConfig);
     
     // 绑定持久化存储
     this.memory.bindStorage(state.storage);
@@ -162,18 +166,42 @@ export class Robot implements DurableObject {
     await this.memory.addAndSave(name, userMsg, "user");
 
     // 处理 AI 回复
-    this.state.waitUntil(this.reply(name, ws));
+    this.enqueueReply(name, ws);
+  }
+
+  // 串行化回复，避免并发导致顺序错乱
+  private enqueueReply(userName: string, ws: WebSocket): void {
+    this.replyChain = this.replyChain
+      .then(() => this.reply(userName, ws))
+      .catch(err => console.error("replyChain error:", err));
+    this.state.waitUntil(this.replyChain);
   }
 
   // 生成回复
   private async reply(userName: string, ws: WebSocket): Promise<void> {
     try {
-      const answer = await think(
+      const { answer, toolMessages } = await think(
         this.aiConfig,
+        this.provider,
         userName,
         this.memory.getHistory(),
         this.name
       );
+
+      for (const msg of toolMessages) {
+        await this.memory.addAndSave(
+          msg.name || msg.tool_name || "tool",
+          msg.content,
+          msg.role,
+          {
+            tool_call_id: msg.tool_call_id,
+            tool_name: msg.tool_name,
+            name: msg.name,
+            tool_calls: msg.tool_calls,
+          }
+        );
+      }
+
       await this.memory.addAndSave(this.name, answer, "assistant");
       ws.send(`[${this.name}]: ${answer}`);
     } catch (error) {
@@ -187,8 +215,28 @@ export class Robot implements DurableObject {
     const attachmentStr = ws.deserializeAttachment();
     if (attachmentStr) {
       const { name } = JSON.parse(attachmentStr) as WebSocketAttachment;
-      console.log(`用户 ${name} 已断开连接，代码: ${code}, 原因: ${reason}`);
+      const reasonText = this.getCloseReason(code, reason);
+      console.log(`用户 ${name} 已断开连接 - ${reasonText}`);
       await this.memory.addAndSave("系统", `${name} 已断开连接`, "user");
     }
+  }
+
+  // 解析 WebSocket 关闭原因
+  private getCloseReason(code: number, reason: string): string {
+    if (reason) return `代码: ${code}, 原因: ${reason}`;
+    
+    const codeReasons: Record<number, string> = {
+      1000: "正常关闭",
+      1001: "客户端离开（如页面关闭）",
+      1002: "协议错误",
+      1003: "不支持的数据类型",
+      1005: "客户端主动断开",
+      1006: "异常断开（网络问题）",
+      1008: "策略违规",
+      1009: "消息过大",
+      1011: "服务器错误",
+    };
+    
+    return codeReasons[code] || `未知关闭码: ${code}`;
   }
 }

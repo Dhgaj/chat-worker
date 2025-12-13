@@ -1,4 +1,5 @@
-// 工具函数 (解码、清洗文本)
+// 工具函数 
+// 解码、清洗文本
 
 // 解码 WebSocket 消息
 export function decodeMessage(message: string | ArrayBuffer): string {
