@@ -32,4 +32,12 @@ AI_PROVIDER=cloudflare
 # ** Google Gemini 配置（当 AI_PROVIDER=gemini 时生效）**
 # 免费版的额度和速率有明显限制，不推荐使用
 # GEMINI_API_KEY=AIzaSy...
-# GEMINI_MODEL=gemini-2.5-flash               
+# GEMINI_MODEL=gemini-2.5-flash
+
+# === 工具配置 ===
+# ** 默认时区（用于时间工具）**
+# DEFAULT_TIMEZONE=Asia/Shanghai
+
+# === 调试配置 ===
+# ** 日志级别: DEBUG | INFO | WARN | ERROR | NONE **
+# LOG_LEVEL=DEBUG

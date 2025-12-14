@@ -2,6 +2,9 @@
 // 聊天历史持久化
 
 import { ChatMessage } from "../types";
+import { loggers } from "../logger";
+
+const log = loggers.memory;
 
 // 存储键名
 const MEMORY_STORAGE_KEY = "chat_history";
@@ -28,7 +31,7 @@ export class Memory {
     const stored = await this.storage.get<ChatMessage[]>(MEMORY_STORAGE_KEY);
     if (stored) {
       this.history = stored;
-      console.log(`[Memory] 已加载 ${this.history.length} 条历史记录`);
+      log.info(`已加载 ${this.history.length} 条历史记录`);
     }
   }
 
@@ -75,6 +78,11 @@ export class Memory {
   // 获取历史记录
   getHistory(): ChatMessage[] {
     return [...this.history];
+  }
+
+  // 获取历史记录（过滤临时性消息，用于构建 AI 上下文）
+  getHistoryForContext(): ChatMessage[] {
+    return this.history.filter(msg => !msg.ephemeral);
   }
 
   // 获取记录数量

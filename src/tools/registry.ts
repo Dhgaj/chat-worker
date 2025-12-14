@@ -1,8 +1,11 @@
 // 工具注册表
 // 所有的外部能力都在这里注册和管理
 
-import { Tool, ToolDefinition } from "./types";
+import { Tool, ToolDefinition, ToolContext } from "./types";
 import { timeTool } from "./builtins/time";
+import { loggers } from "../logger";
+
+const log = loggers.tools;
 
 // 工具注册表
 const toolRegistry: Map<string, Tool> = new Map();
@@ -10,12 +13,18 @@ const toolRegistry: Map<string, Tool> = new Map();
 // 注册工具
 export function registerTool(tool: Tool): void {
   toolRegistry.set(tool.name, tool);
-  console.log(`[Tools] 已注册工具: ${tool.name}`);
+  log.debug(`已注册工具: ${tool.name}`);
 }
 
 // 获取工具
 export function getTool(name: string): Tool | undefined {
   return toolRegistry.get(name);
+}
+
+// 检查工具是否为临时性工具
+export function isToolEphemeral(name: string): boolean {
+  const tool = toolRegistry.get(name);
+  return tool?.ephemeral ?? false;
 }
 
 // 获取所有工具
@@ -36,13 +45,17 @@ export function getToolDefinitions(): ToolDefinition[] {
 }
 
 // 执行工具
-export async function executeTool(name: string, args: Record<string, any> = {}): Promise<any> {
+export async function executeTool(
+  name: string, 
+  args: Record<string, any> = {},
+  context?: ToolContext
+): Promise<any> {
   const tool = toolRegistry.get(name);
   if (!tool) {
     throw new Error(`工具 "${name}" 未找到`);
   }
-  console.log(`[Tools] 执行工具: ${name}`, args);
-  return tool.execute(args);
+  log.debug(`执行工具: ${name}`, args);
+  return tool.execute(args, context);
 }
 
 // 初始化：注册内置工具
@@ -55,4 +68,4 @@ function initBuiltinTools(): void {
 initBuiltinTools();
 
 // 导出类型
-export type { Tool, ToolDefinition, ToolParameterSchema, ToolCallResult } from "./types";
+export type { Tool, ToolDefinition, ToolParameterSchema, ToolCallResult, ToolContext } from "./types";

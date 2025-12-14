@@ -5,7 +5,10 @@ import { ChatMessage } from "./types";
 import { cleanAiResponse } from "./utils";
 import { getSystemPrompt } from "./prompts";
 import { callAI, AIConfig, AIToolCall, IAIProvider, LLMMessage } from "./llm";
-import { getToolDefinitions, executeTool } from "./tools/registry";
+import { getToolDefinitions, executeTool, isToolEphemeral, ToolContext } from "./tools/registry";
+import { loggers } from "./logger";
+
+const log = loggers.brain;
 
 export interface ThinkResult {
   answer: string;
@@ -13,7 +16,10 @@ export interface ThinkResult {
 }
 
 // 工具调用执行
-async function executeToolCalls(toolCalls: AIToolCall[]): Promise<{
+async function executeToolCalls(
+  toolCalls: AIToolCall[],
+  toolContext?: ToolContext
+): Promise<{
   aiMessages: ChatMessage[];
   memoryMessages: ChatMessage[];
 }> {
@@ -23,7 +29,7 @@ async function executeToolCalls(toolCalls: AIToolCall[]): Promise<{
   for (const toolCall of toolCalls) {
     // 安全检查
     if (!toolCall?.function?.name) {
-      console.warn(`[Brain] 跳过无效的工具调用:`, toolCall);
+      log.warn("跳过无效的工具调用", toolCall);
       continue;
     }
     
@@ -36,8 +42,9 @@ async function executeToolCalls(toolCalls: AIToolCall[]): Promise<{
     }
     
     try {
-      const result = await executeTool(name, args as Record<string, any>);
+      const result = await executeTool(name, args as Record<string, any>, toolContext);
       const content = typeof result === "string" ? result : JSON.stringify(result);
+      const ephemeral = isToolEphemeral(name);
       
       aiMessages.push({
         role: "tool",
@@ -53,12 +60,16 @@ async function executeToolCalls(toolCalls: AIToolCall[]): Promise<{
         name,
         tool_call_id: id,
         tool_name: name,
+        ephemeral, // 标记是否为临时性消息
       });
       
-      console.log(`[Brain] 工具 ${name} 执行结果:`, result);
+      log.info(`工具 ${name} 执行完成${ephemeral ? " (临时)" : ""}`, result);
     } catch (error) {
       const err = error as Error;
       const failureText = `[${name}] 执行失败 - ${err.message}`;
+      const ephemeral = isToolEphemeral(name);
+      
+      log.error(`工具 ${name} 执行失败`, err.message);
       
       aiMessages.push({
         role: "tool",
@@ -74,9 +85,8 @@ async function executeToolCalls(toolCalls: AIToolCall[]): Promise<{
         name,
         tool_call_id: id,
         tool_name: name,
+        ephemeral, // 失败消息同样标记
       });
-      
-      console.error(`[Brain] 工具 ${name} 执行失败:`, err);
     }
   }
   
@@ -89,7 +99,8 @@ export async function think(
   provider: IAIProvider,
   userName: string,
   history: ChatMessage[],
-  robotName: string
+  robotName: string,
+  toolContext?: ToolContext
 ): Promise<ThinkResult> {
   try {
     const hasToolCalling = config.enableToolCalling ?? true;
@@ -102,8 +113,8 @@ export async function think(
       ...history,
     ];
 
-    console.log(`*** AI Request [${config.provider}] ***`);
-    console.log(`[Brain] 工具调用: ${hasToolCalling ? "启用" : "禁用"}`);
+    log.separator(`AI Request [${config.provider}]`);
+    log.info(`工具调用: ${hasToolCalling ? "启用" : "禁用"}`);
     
     // 第一次调用：可能返回工具调用
     let response = await callAI(provider, messagesToSend, tools);
@@ -120,7 +131,7 @@ export async function think(
         .filter(tc => tc?.function?.name)
         .map(tc => tc.function.name);
       
-      console.log(`[Brain] AI 请求调用工具:`, toolNames);
+      log.highlight(`AI 请求调用工具: ${toolNames.join(", ")}`);
       
       const assistantToolMessage: ChatMessage = {
         role: "assistant",
@@ -129,7 +140,7 @@ export async function think(
         name: robotName,
       };
       
-      const { aiMessages, memoryMessages } = await executeToolCalls(toolCalls);
+      const { aiMessages, memoryMessages } = await executeToolCalls(toolCalls, toolContext);
       toolMessagesToPersist.push(...memoryMessages);
       
       // 构建工具结果摘要
@@ -149,13 +160,13 @@ export async function think(
       response = await callAI(provider, messagesWithToolResult, undefined);
     }
 
-    console.log(`[Raw AI Response]: ${response.content}`);
+    log.debug("AI 原始响应", response.content);
     const cleaned = cleanAiResponse(response.content);
     return { answer: cleaned || "Hmm... 我好像没听清。", toolMessages: toolMessagesToPersist };
 
   } catch (error) {
     const err = error as Error;
-    console.error("AI Error:", err);
+    log.error("AI 调用失败", err.message);
     return { answer: `(AI 连接打瞌睡了: ${err.message})`, toolMessages: [] };
   }
 }
@@ -164,3 +175,4 @@ export async function think(
 export { Memory } from "./memory";
 export { getAIConfig, createProvider } from "./llm";
 export type { AIConfig, IAIProvider } from "./llm";
+export type { ToolContext } from "./tools/registry";

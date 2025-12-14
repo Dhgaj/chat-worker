@@ -3,6 +3,9 @@
 import { CLOUDFLARE_MODEL, CLOUDFLARE_TOOL_MODEL } from "../../config";
 import { AIResponse, AIToolCall, LLMMessage, ToolDefinitionForAI } from "../types";
 import { IAIProvider } from "./base";
+import { loggers } from "../../logger";
+
+const log = loggers.cloudflare;
 
 // Cloudflare AI 配置接口
 export interface CloudflareConfig {
@@ -49,10 +52,10 @@ export class CloudflareProvider implements IAIProvider {
       ? convertToCloudflareFormat(tools) 
       : undefined;
     
-    console.log(`[Cloudflare] 使用模型: ${model}`);
-    console.log(`[Cloudflare] 工具数量: ${cloudflareTools?.length || 0}`);
+    log.info(`使用模型: ${model}`);
+    log.debug(`工具数量: ${cloudflareTools?.length || 0}`);
     if (cloudflareTools) {
-      console.log(`[Cloudflare] 工具定义:`, JSON.stringify(cloudflareTools, null, 2));
+      log.debug("工具定义", cloudflareTools);
     }
     
     const response = await this.ai.run(model, {
@@ -62,9 +65,24 @@ export class CloudflareProvider implements IAIProvider {
       tools: cloudflareTools,
     });
     
-    console.log(`[Cloudflare] 原始响应:`, JSON.stringify(response));
+    log.debug("原始响应", response);
     
     const responseAny = response as any;
+    
+    // 检测空响应，可能是工具模型不稳定
+    if (!responseAny.response && (!responseAny.tool_calls || responseAny.tool_calls.length === 0)) {
+      // 如果使用了工具模型但返回空响应，回退到普通模型重试
+      if (cloudflareTools && cloudflareTools.length > 0) {
+        log.warn(`工具模型返回空响应，回退到普通模型: ${CLOUDFLARE_MODEL}`);
+        const fallbackResponse = await this.ai.run(CLOUDFLARE_MODEL, {
+          messages: messages as any,
+          temperature: 0.6,
+          max_tokens: 256,
+        });
+        log.debug("回退响应", fallbackResponse);
+        return { content: fallbackResponse.response || "" };
+      }
+    }
     
     // Cloudflare 的 tool_calls 结构：{ name, arguments }
     if (responseAny.tool_calls && responseAny.tool_calls.length > 0) {
@@ -79,7 +97,7 @@ export class CloudflareProvider implements IAIProvider {
         }));
       
       if (toolCalls.length > 0) {
-        console.log(`[Cloudflare] 检测到工具调用:`, toolCalls.map(tc => tc.function.name));
+        log.info("检测到工具调用", toolCalls.map(tc => tc.function.name));
         return { content: "", toolCalls };
       }
     }

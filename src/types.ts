@@ -52,6 +52,12 @@ export interface Env {
   
   // 功能开关
   ENABLE_TOOL_CALLING?: string;  // "true" | "false"
+  
+  // 默认时区
+  DEFAULT_TIMEZONE?: string;  // 如 "Asia/Shanghai"
+  
+  // 日志级别: "DEBUG" | "INFO" | "WARN" | "ERROR" | "NONE"
+  LOG_LEVEL?: string;
 }
 
 // WebSocket 附加信息
@@ -79,4 +85,6 @@ export interface ChatMessage {
   tool_call_id?: string;
   name?: string;
   tool_calls?: ToolCall[];
+  /** 是否为临时性消息（构建 AI 上下文时应被过滤） */
+  ephemeral?: boolean;
 }

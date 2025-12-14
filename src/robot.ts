@@ -1,9 +1,12 @@
-// [身体] Durable Object (连接保持、鉴权)
+// Durable Object (连接保持、鉴权) [身体]
 /// <reference types="@cloudflare/workers-types" />
 import { Env, WebSocketAttachment } from "./types";
-import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS, DEFAULT_ROBOT_NAME, MEMORY_MAX_SIZE } from "./config";
+import { MAX_MESSAGE_LENGTH, RATE_LIMIT_MS, DEFAULT_ROBOT_NAME, MEMORY_MAX_SIZE, DEFAULT_TIMEZONE } from "./config";
 import { decodeMessage } from "./utils";
-import { Memory, think, getAIConfig, AIConfig, createProvider, IAIProvider } from "./brain";
+import { Memory, think, getAIConfig, AIConfig, createProvider, IAIProvider, ToolContext } from "./brain";
+import { loggers, setLogLevel } from "./logger";
+
+const log = loggers.robot;
 
 // 扩展 WebSocket 类型以包含自定义方法
 declare global {
@@ -23,9 +26,16 @@ export class Robot implements DurableObject {
   private provider: IAIProvider;
   private replyChain: Promise<void> = Promise.resolve();
 
+  // 构造函数
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
+    
+    // 设置日志级别
+    if (env.LOG_LEVEL) {
+      setLogLevel(env.LOG_LEVEL);
+    }
+    
     this.memory = new Memory(MEMORY_MAX_SIZE);
     this.aiConfig = getAIConfig(env);
     this.provider = createProvider(this.aiConfig);
@@ -33,7 +43,7 @@ export class Robot implements DurableObject {
     // 绑定持久化存储
     this.memory.bindStorage(state.storage);
     
-    console.log(`[Robot] AI 提供商: ${this.aiConfig.provider}`);
+    log.info(`AI 提供商: ${this.aiConfig.provider}`);
   }
 
   // 确保记忆已加载
@@ -147,6 +157,7 @@ export class Robot implements DurableObject {
       return;
     }
 
+    // 更新最后消息时间
     attachment.lastMessageAt = now;
     ws.serializeAttachment(JSON.stringify(attachment));
 
@@ -180,14 +191,21 @@ export class Robot implements DurableObject {
   // 生成回复
   private async reply(userName: string, ws: WebSocket): Promise<void> {
     try {
+      // 构建工具上下文
+      const toolContext: ToolContext = {
+        defaultTimezone: this.env.DEFAULT_TIMEZONE || DEFAULT_TIMEZONE,
+      };
+
       const { answer, toolMessages } = await think(
         this.aiConfig,
         this.provider,
         userName,
-        this.memory.getHistory(),
-        this.name
+        this.memory.getHistoryForContext(), // 使用过滤后的历史（排除临时性消息）
+        this.name,
+        toolContext
       );
 
+      // 保存工具消息（包含 ephemeral 标记，便于调试/审计）
       for (const msg of toolMessages) {
         await this.memory.addAndSave(
           msg.name || msg.tool_name || "tool",
@@ -196,16 +214,17 @@ export class Robot implements DurableObject {
           {
             tool_call_id: msg.tool_call_id,
             tool_name: msg.tool_name,
-            name: msg.name,
-            tool_calls: msg.tool_calls,
+            ephemeral: msg.ephemeral,
           }
         );
       }
 
+      // 保存 AI 的最终回答
       await this.memory.addAndSave(this.name, answer, "assistant");
       ws.send(`[${this.name}]: ${answer}`);
     } catch (error) {
-      console.error("AI 处理错误:", error);
+      const err = error as Error;
+      log.error("AI 处理错误", err.message);
       ws.send("[系统]: 抱歉，AI 处理请求时出错了，请稍后再试。");
     }
   }
@@ -216,7 +235,7 @@ export class Robot implements DurableObject {
     if (attachmentStr) {
       const { name } = JSON.parse(attachmentStr) as WebSocketAttachment;
       const reasonText = this.getCloseReason(code, reason);
-      console.log(`用户 ${name} 已断开连接 - ${reasonText}`);
+      log.info(`用户 ${name} 已断开连接`, reasonText);
       await this.memory.addAndSave("系统", `${name} 已断开连接`, "user");
     }
   }

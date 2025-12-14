@@ -2,6 +2,9 @@
 
 import { AIResponse, AIToolCall, LLMMessage, ToolDefinitionForAI } from "../types";
 import { IAIProvider } from "./base";
+import { loggers } from "../../logger";
+
+const log = loggers.ollama;
 
 // Ollama 配置接口
 export interface OllamaConfig {
@@ -85,14 +88,27 @@ export class OllamaProvider implements IAIProvider {
       requestBody.tools = tools;
     }
     
-    const response = await fetch(`${this.host}/api/chat`, {
+    let response = await fetch(`${this.host}/api/chat`, {
       method: "POST",
       headers,
       body: JSON.stringify(requestBody),
     });
 
+    // 如果返回 500 且使用了工具，可能是模型不支持工具调用，降级重试
+    if (!response.ok && response.status === 500 && tools && tools.length > 0) {
+      log.warn(`模型 ${this.model} 可能不支持工具调用，降级为普通对话`);
+      delete requestBody.tools;
+      response = await fetch(`${this.host}/api/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+      });
+    }
+
     if (!response.ok) {
-      throw new Error(`Ollama API 错误: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      log.error("API 错误详情", errorText);
+      throw new Error(`Ollama API 错误: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json() as { 
@@ -104,6 +120,7 @@ export class OllamaProvider implements IAIProvider {
         id: tc.id || `${idx}`,
         function: tc.function,
       }));
+      log.info("检测到工具调用", toolCalls.map(tc => tc.function.name));
       return { content: "", toolCalls };
     }
     
